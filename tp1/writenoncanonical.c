@@ -22,9 +22,9 @@ int main(int argc, char** argv)
     int i, sum = 0, speed = 0;
     
     if ( (argc < 2) || 
-  	     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
-  	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
-      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
+  	     ((strcmp("/dev/ttyS10", argv[1])!=0) && 
+  	      (strcmp("/dev/ttyS11", argv[1])!=0) )) {
+      printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
       exit(1);
     }
 
@@ -43,6 +43,10 @@ int main(int argc, char** argv)
       exit(-1);
     }
 
+
+    /*
+    ConfiguraÃ§Ã£o da Porta SÃ©rie
+    */
     bzero(&newtio, sizeof(newtio));
     newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
@@ -51,14 +55,12 @@ int main(int argc, char** argv)
     /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
+    newtio.c_cc[VTIME]    = 1;   /* inter-character timer unused */
     newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
-
-
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
-    leitura do(s) próximo(s) caracter(es)
+    leitura do(s) prï¿½ximo(s) caracter(es)
   */
 
 
@@ -72,22 +74,36 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-
-
-    for (i = 0; i < 255; i++) {
-      buf[i] = 'a';
+    printf("Insert string: ");
+    
+    if(fgets(buf, 255, stdin) == NULL){
+      printf("Erro!\n");
+      exit(1);
     }
     
-    /*testing*/
-    buf[25] = '\n';
-    
-    res = write(fd,buf,255);   
-    printf("%d bytes written\n", res);
+    int num = 0;
+    while(num < strlen(buf)){
+      write(fd, &buf[num], 1);
+      num++;
+    }
+    buf[strlen(buf)] = '\0';
+    write(fd, &buf[strlen(buf)], 1);
+
+    printf("Mensagem Enviada!\nEspera por Confirmacao...\n\n");
+
+    num = 0;
+    while(1){
+      read(fd, &buf[num], 1);
+      if(buf[num] == '\0') break;
+      num++;
+    }
+
+    printf("Mensagem Recebida: %s\n", buf);
  
 
   /* 
-    O ciclo FOR e as instruções seguintes devem ser alterados de modo a respeitar 
-    o indicado no guião 
+    O ciclo FOR e as instruï¿½ï¿½es seguintes devem ser alterados de modo a respeitar 
+    o indicado no guiï¿½o 
   */
 
 
