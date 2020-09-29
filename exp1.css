@@ -1,0 +1,22 @@
+#quad{
+    margin: 1em;
+    border-style: solid;
+    border-width: 1px;
+    width: 100px;
+    height: 100px;
+    background-color: #0000FF;
+    transition: width 1s, height 1s, background-color 5s, transform 1s;
+}
+
+#quad:hover {
+    background-color: #FF0000;
+    width: 150px;
+    height: 150px;
+    transform: skew(30deg);
+}
+
+
+p{
+    width:20em;
+    float: right;
+}
