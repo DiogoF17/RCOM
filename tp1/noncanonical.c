@@ -73,14 +73,17 @@ int main(int argc, char** argv)
     int send = 0;
     
     read(fd,&buf,1); // reads f
-    printf("first f");
+    
     if(buf == 0x7E){
+        printf("first f");
         read(fd,&buf,1); // reads a
         read(fd,&buf,1); // reads c
         read(fd,&buf,1); // reads bcc
         if(buf == 0x03 ^ 0x03){
+            printf("bcc");
             read(fd,&buf,1); // reads f
             if(buf == 0x7E){
+                printf("second f");
                 send = 1;
                 printf("Mensagem Recebida: %s\n\nEnviando       Confirmacao...\n", buf);
             }
