@@ -114,6 +114,7 @@ int main(int argc, char** argv)
     O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
     o indicado no gui�o 
   */
+    int receivd = 0;
 
     read(fd,&buf,1); // reads f
     if(buf == 0x7E){
@@ -122,11 +123,11 @@ int main(int argc, char** argv)
         read(fd,&buf,1); // reads bcc
         if(buf == 0x01 ^ 0x07){
             read(fd,&buf,1); // reads f
-            if(buf == 0x7E) break;
+            if(buf == 0x7E) received = 1;
         }
     }
 
-    printf("Mensagem Recebida: %s\n", buf);
+    if(received) printf("Mensagem Recebida: %s\n", buf);
 
 
 

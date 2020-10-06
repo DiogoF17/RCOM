@@ -69,6 +69,8 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
+
+    int send = 0;
     
     read(fd,&buf,1); // reads f
     if(buf == 0x7E){
@@ -77,18 +79,21 @@ int main(int argc, char** argv)
         read(fd,&buf,1); // reads bcc
         if(buf == 0x03 ^ 0x03){
             read(fd,&buf,1); // reads f
-            if(buf == 0x7E) break;
-        }
+            if(buf == 0x7E){
+                send = 1;
+                printf("Mensagem Recebida: %s\n\nEnviando       Confirmacao...\n", buf);
+            }
     }
 
-    unsigned char f = 0x7E, a = 0x01, c = 0x07, bcc = a ^ c;
-    write(fd, &f, 1);
-    write(fd, &a, 1);
-    write(fd, &c, 1);
-    write(fd, &bcc, 1);
-    write(fd, &f, 1);
+    if(send){
+        unsigned char f = 0x7E, a = 0x01, c = 0x07, bcc = a ^ c;
+        write(fd, &f, 1);
+        write(fd, &a, 1);
+        write(fd, &c, 1);
+        write(fd, &bcc, 1);
+        write(fd, &f, 1);
+    }
 
-    printf("Mensagem Recebida: %s\n\nEnviando Confirmacao...\n", buf);
 
     /*num = 0;
 
