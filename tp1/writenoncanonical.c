@@ -89,13 +89,13 @@ int main(int argc, char** argv)
     buf[strlen(buf)] = '\0';
     write(fd, &buf[strlen(buf)], 1);*/
 
-    unsigned char flag = 0x55;
+    unsigned char flag = 0x7E;
     write(fd, &flag, 1);
     unsigned char a = 0x03;
     write(fd, &a, 1);
     unsigned char c = 0x03;
     write(fd, &c, 1);
-    
+    unsigned char bcc = a ^ c;
     write(fd, &flag, 1);
 
     printf("Mensagem Enviada!\nEspera por Confirmacao...\n\n");
@@ -114,6 +114,19 @@ int main(int argc, char** argv)
     O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
     o indicado no gui�o 
   */
+
+    read(fd,&buf,1); // reads f
+    if(buf == 0x7E){
+        read(fd,&buf,1); // reads a
+        read(fd,&buf,1); // reads c
+        read(fd,&buf,1); // reads bcc
+        if(buf == 0x01 ^ 0x07){
+            read(fd,&buf,1); // reads f
+            if(buf == 0x7E) break;
+        }
+    }
+
+    printf("Mensagem Recebida: %s\n", buf);
 
 
 

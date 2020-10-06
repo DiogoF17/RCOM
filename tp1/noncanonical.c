@@ -69,19 +69,24 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
-    int end = 0;
-    int num = 0;
     
-    while(num == 0){
-        if(buf == 0x55) num++;
+    read(fd,&buf,1); // reads f
+    if(buf == 0x7E){
+        read(fd,&buf,1); // reads a
+        read(fd,&buf,1); // reads c
+        read(fd,&buf,1); // reads bcc
+        if(buf == 0x03 ^ 0x03){
+            read(fd,&buf,1); // reads f
+            if(buf == 0x7E) break;
+        }
     }
 
-    while (!end) {       /* loop for input */
-      read(fd,&buf,1);   /* returns after 5 chars have been input */
-      if(buf == 0x55) num++;
-      if(num % 2 == 0) end = 1;
-        
-    }
+    unsigned char f = 0x7E, a = 0x01, c = 0x07, bcc = a ^ c;
+    write(fd, &f, 1);
+    write(fd, &a, 1);
+    write(fd, &c, 1);
+    write(fd, &bcc, 1);
+    write(fd, &f, 1);
 
     printf("Mensagem Recebida: %s\n\nEnviando Confirmacao...\n", buf);
 
