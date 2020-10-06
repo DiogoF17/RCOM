@@ -85,7 +85,7 @@ int main(int argc, char** argv)
 
     printf("Mensagem Recebida: %s\n\nEnviando Confirmacao...\n", buf);
 
-    num = 0;
+    /*num = 0;
 
     while(num < strlen(buf)){
       write(fd, &buf[num], 1);
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
     buf[strlen(buf)] = '\0';
     write(fd, &buf[strlen(buf)], 1);
 
-    printf("Mensagem Enviada!\n");
+    printf("Mensagem Enviada!\n");*/
 
 
 

@@ -100,14 +100,14 @@ int main(int argc, char** argv)
 
     printf("Mensagem Enviada!\nEspera por Confirmacao...\n\n");
 
-    num = 0;
+    /*num = 0;
     while(1){
       read(fd, &buf[num], 1);
       if(buf[num] == '\0') break;
       num++;
     }
 
-    printf("Mensagem Recebida: %s\n", buf);
+    printf("Mensagem Recebida: %s\n", buf);*/
  
 
   /* 
