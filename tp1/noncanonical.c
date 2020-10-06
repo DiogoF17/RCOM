@@ -73,6 +73,7 @@ int main(int argc, char** argv)
     int send = 0;
     
     read(fd,&buf,1); // reads f
+    printf("first f");
     if(buf == 0x7E){
         read(fd,&buf,1); // reads a
         read(fd,&buf,1); // reads c
