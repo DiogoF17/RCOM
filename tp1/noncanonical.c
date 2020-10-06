@@ -83,6 +83,7 @@ int main(int argc, char** argv)
                 send = 1;
                 printf("Mensagem Recebida: %s\n\nEnviando       Confirmacao...\n", buf);
             }
+        }
     }
 
     if(send){
