@@ -22,8 +22,8 @@ int main(int argc, char** argv)
     int i, sum = 0, speed = 0;
     
     if ( (argc < 2) || 
-  	     ((strcmp("/dev/ttyS10", argv[1])!=0) && 
-  	      (strcmp("/dev/ttyS11", argv[1])!=0) )) {
+  	     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
+  	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
       exit(1);
     }
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-    printf("Insert string: ");
+    /*printf("Insert string: ");
     
     if(fgets(buf, 255, stdin) == NULL){
       printf("Erro!\n");
@@ -87,7 +87,16 @@ int main(int argc, char** argv)
       num++;
     }
     buf[strlen(buf)] = '\0';
-    write(fd, &buf[strlen(buf)], 1);
+    write(fd, &buf[strlen(buf)], 1);*/
+
+    unsigned char flag = 0x55;
+    write(fd, &flag, 1);
+    unsigned char a = 0x03;
+    write(fd, &a, 1);
+    unsigned char c = 0x03;
+    write(fd, &c, 1);
+    
+    write(fd, &flag, 1);
 
     printf("Mensagem Enviada!\nEspera por Confirmacao...\n\n");
 

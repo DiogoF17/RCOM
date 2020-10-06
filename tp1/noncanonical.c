@@ -17,7 +17,7 @@ int main(int argc, char** argv)
 {
     int fd,c, res;
     struct termios oldtio, newtio;
-    char buf[255];
+    unsigned char buf;
 
     if ( (argc < 2) || 
   	     ((strcmp("/dev/ttyS10", argv[1])!=0) && 
@@ -69,11 +69,18 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
+    int end = 0;
     int num = 0;
-    while (1) {       /* loop for input */
-      read(fd,&buf[num],1);   /* returns after 5 chars have been input */
-      if (buf[num] == '\0') break;
-      num++;
+    
+    while(num == 0){
+        if(buf == 0x55) num++;
+    }
+
+    while (!end) {       /* loop for input */
+      read(fd,&buf,1);   /* returns after 5 chars have been input */
+      if(buf == 0x55) num++;
+      if(num % 2 == 0) end = 1;
+        
     }
 
     printf("Mensagem Recebida: %s\n\nEnviando Confirmacao...\n", buf);
