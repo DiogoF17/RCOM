@@ -101,9 +101,8 @@ int main(int argc, char** argv)
 
   //================================
 
-  if(receiveConnectionRequest(fd)){
+  if(receiveConnectionRequest(fd))
       writeAcknowledge(fd);
-  }
 
   //================================
 

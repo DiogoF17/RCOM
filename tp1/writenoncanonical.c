@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -29,11 +30,15 @@ void establishConnection(){
     write(fd, &bcc, 1);
     write(fd, &f, 1);
 
-    printf("\nPedido de Conexao Enviado!\n\nEspera por Acknowledgment...\n");
+    if(tentativas != 0)
+      printf("\nReenviando Pedido de Conexao Enviado!\n\nEspera por Acknowledgment...\n");
+    else
+      printf("\nPedido de Conexao Enviado!\n\nEspera por Acknowledgment...\n");
     alarm(3); // quantidade de tempo que espera pelo acknowledgment
   }
   else{
-    printf("\nPedido de Conexao Nao Enviado!\nAtingiu o limite de tentativas!\n\n");
+    printf("\nAbortando Estabelecimento de Conexao com o Recetor!\nAtingiu o limite de tentativas!\n\n");
+    exit(-1);
   }
   tentativas++;
 }
@@ -56,7 +61,7 @@ void waitingAcknowledgment(){
 
   do{
     read(fd, &buf, 1);
-  } while(buf == (0x01 ^ 0x07)); // verifica se a trama recebida e valida
+  } while(buf != (0x01 ^ 0x07)); // verifica se a trama recebida e valida
 
   printf("Acknowledgment Recebido!\n\n");
   alarm(0); // cancela todos os alarmes pendentes
@@ -97,8 +102,8 @@ int main(int argc, char** argv)
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME]    = 1;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
+  newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
