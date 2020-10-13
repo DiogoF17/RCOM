@@ -16,6 +16,12 @@
 #define FALSE 0
 #define TRUE 1
 
+#define CONNECT 0
+#define DATA_TRANSMISSION 1
+#define DISCONNECT 2
+
+int fase = CONNECT;
+
 volatile int STOP=FALSE;
 
 int tentativas= 0, fd;
@@ -91,7 +97,7 @@ void waitingAcknowledgment(){
 }
 
 void disconnect(){
-  unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
+  /*unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
 
   write(fd, &f, 1);
   write(fd, &a, 1);
@@ -99,7 +105,28 @@ void disconnect(){
   write(fd, &bcc, 1);
   write(fd, &f, 1);
 
-  printf("Disconnection Request Sent!\n\n");
+  printf("Disconnection Request Sent!\n\n");*/
+  if(tentativas != 3){
+    unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
+
+    write(fd, &f, 1);
+    write(fd, &a, 1);
+    write(fd, &c, 1);
+    write(fd, &bcc, 1);
+    write(fd, &f, 1);
+
+    if(tentativas != 0)
+      printf("\nDisconnection Request Resent!\n\nWaiting for Confirmation...\n");
+    else
+      printf("\nDisconnection Request Sent!\n\nWaiting for Confirmation...\n");
+    alarm(3); // quantidade de tempo que espera pelo acknowledgment
+  }
+  else{
+    printf("\nAborting Disconnection with the Receiver!\nReached the Limit of Resquests!\n\n");
+    exit(-1); // acaba o programa
+  }
+  tentativas++;
+  
 }
 
 void waitingDisconnect(){
@@ -137,7 +164,7 @@ void waitingDisconnect(){
     else  break;
   }
   
-  //alarm(0); // cancela todos os alarmes pendentes*/
+  alarm(0); // cancela todos os alarmes pendentes*/
   printf("Disconnection Request Received!\n\n");
 }
 
@@ -151,6 +178,12 @@ void sendAcknowledgement(){
   write(fd, &f, 1);
 
   printf("Confirmation Sent!\n\n");
+}
+
+void timeOut(){
+  if(fase == CONNECT) connect();
+  else if(fase == DATA_TRANSMISSION){} // resend_data()
+  else disconnect();
 }
 
 int main(int argc, char** argv)
@@ -208,11 +241,20 @@ int main(int argc, char** argv)
 
   //=================
 
-  (void) signal(SIGALRM, connect);
+  (void) signal(SIGALRM, timeOut);
 
+  // Connecting
   connect(); // sends request to establish connection
   waitingAcknowledgment(); // waits for the receiver acknowledgment
 
+  // Sending Data
+  tentativas = 0;
+  fase = DATA_TRANSMISSION;
+  //send_data()
+
+  // Disconnecting
+  tentativas = 0;
+  fase = DISCONNECT;
   disconnect();
   waitingDisconnect();
   sendAcknowledgement();
