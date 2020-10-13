@@ -20,6 +20,13 @@ volatile int STOP=FALSE;
 
 int tentativas= 0, fd;
 
+#define START 1
+#define FLAG_RCV 2
+#define A_RCV 3
+#define C_RCV 4
+#define BCC_OK 5
+#define STOP 6
+
 void establishConnection(){
   if(tentativas != 3){
     unsigned char f = 0x7E, a = 0x03, c = 0x03, bcc = a ^ c;
@@ -44,27 +51,42 @@ void establishConnection(){
 }
 
 void waitingAcknowledgment(){
+  int estado = START;
   unsigned char buf;
 
-  /*read(fd,&buf,1); // reads f
-  if(buf == 0x7E){
-    read(fd, &buf, 1); // reads a
-    read(fd, &buf, 1); // reads c
-    read(fd, &buf, 1); // reads bcc
-    if(buf == (0x01 ^ 0x07)){
-        read(fd, &buf, 1); // reads f
-        if(buf == 0x7E) {
-          printf("Acknowledgment Recebido!\n\n");
-        }
+  // State Machine For the Connection Request
+  while(1){
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
     }
-  }*/
-
-  do{
-    read(fd, &buf, 1);
-  } while(buf != (0x01 ^ 0x07)); // verifica se a trama recebida e valida
-
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x01) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x07) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x01 ^ 0x07)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = STOP;
+      else estado = START;
+    }
+    else  break;
+  }
+  
+  alarm(0); // cancela todos os alarmes pendentes*/
   printf("Acknowledgment Recebido!\n\n");
-  alarm(0); // cancela todos os alarmes pendentes
 }
 
 int main(int argc, char** argv)
@@ -120,22 +142,6 @@ int main(int argc, char** argv)
   printf("New termios structure set\n");
   printf("\n==============\n");
 
-  /*printf("Insert string: ");
-  
-  if(fgets(buf, 255, stdin) == NULL){
-    printf("Erro!\n");
-    exit(1);
-  }
-  
-  int num = 0;
-  while(num < strlen(buf)){
-    write(fd, &buf[num], 1);
-    num++;
-  }
-  buf[strlen(buf)] = '\0';
-  write(fd, &buf[strlen(buf)], 1);*/
-  //printf("Mensagem Enviada!\nEspera por Confirmacao...\n\n");
-
   //=================
 
   (void) signal(SIGALRM, establishConnection);
@@ -144,20 +150,6 @@ int main(int argc, char** argv)
   waitingAcknowledgment(); // waits for the receiver acknowledgment
 
   //=================
-
-  /*num = 0;
-  while(1){
-    read(fd, &buf[num], 1);
-    if(buf[num] == '\0') break;
-    num++;
-  }
-
-  printf("Mensagem Recebida: %s\n", buf);*/
-
-  /* 
-    O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
-    o indicado no gui�o 
-  */
 
   printf("==============\n\n");
 

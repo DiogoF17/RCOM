@@ -16,24 +16,49 @@
 
 volatile int STOP=FALSE;
 
-int receiveConnectionRequest(int fd){
+#define START 1
+#define FLAG_RCV 2
+#define A_RCV 3
+#define C_RCV 4
+#define BCC_OK 5
+#define STOP 6
+
+void receiveConnectionRequest(int fd){
+  int estado = START;
   unsigned char buf;
-  read(fd, &buf, 1); // reads f
-  
-  if(buf == 0x7E){
-      read(fd, &buf, 1); // reads a
-      read(fd, &buf, 1); // reads c
-      read(fd, &buf, 1); // reads bcc
-      if(buf == (0x03 ^ 0x03)){
-        read(fd, &buf ,1); // reads f
-        if(buf == 0x7E){
-          printf("\nMensagem Recebida!\n\nEnviando Confirmacao...\n");
-          return 1;
-        }
-      }
+
+  // State Machine For the Connection Request
+  while(1){
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+    }
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x03) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x03) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x03 ^ 0x03)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = STOP;
+      else estado = START;
+    }
+    else break;
   }
-  
-  return 0;
+
+  printf("\nMensagem Recebida!\n\nEnviando Confirmacao...\n");
 }
 
 void writeAcknowledge(int fd){
@@ -101,28 +126,10 @@ int main(int argc, char** argv)
 
   //================================
 
-  if(receiveConnectionRequest(fd))
-      writeAcknowledge(fd);
+  receiveConnectionRequest(fd);
+  writeAcknowledge(fd);
 
   //================================
-
-
-  /*num = 0;
-
-  while(num < strlen(buf)){
-    write(fd, &buf[num], 1);
-    num++;
-  }
-  buf[strlen(buf)] = '\0';
-  write(fd, &buf[strlen(buf)], 1);
-
-  printf("Mensagem Enviada!\n");*/
-
-
-
-  /* 
-    O ciclo WHILE deve ser alterado de modo a respeitar o indicado no gui�o 
-  */
 
   printf("==============\n\n");
 
