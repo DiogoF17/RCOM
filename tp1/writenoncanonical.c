@@ -27,7 +27,8 @@ int tentativas= 0, fd;
 #define BCC_OK 5
 #define STOP 6
 
-void establishConnection(){
+
+void connect(){
   if(tentativas != 3){
     unsigned char f = 0x7E, a = 0x03, c = 0x03, bcc = a ^ c;
 
@@ -38,14 +39,14 @@ void establishConnection(){
     write(fd, &f, 1);
 
     if(tentativas != 0)
-      printf("\nReenviando Pedido de Conexao Enviado!\n\nEspera por Acknowledgment...\n");
+      printf("\nConnection Request Resent!\n\nWaiting for Confirmation...\n");
     else
-      printf("\nPedido de Conexao Enviado!\n\nEspera por Acknowledgment...\n");
+      printf("\nConnection Request Sent!\n\nWaiting for Confirmation...\n");
     alarm(3); // quantidade de tempo que espera pelo acknowledgment
   }
   else{
-    printf("\nAbortando Estabelecimento de Conexao com o Recetor!\nAtingiu o limite de tentativas!\n\n");
-    exit(-1);
+    printf("\nAborting Connection with the Receiver!\nReached the Limit of Resquests!\n\n");
+    exit(-1); // acaba o programa
   }
   tentativas++;
 }
@@ -86,7 +87,70 @@ void waitingAcknowledgment(){
   }
   
   alarm(0); // cancela todos os alarmes pendentes*/
-  printf("Acknowledgment Recebido!\n\n");
+  printf("Confirmation Received!\n\n");
+}
+
+void disconnect(){
+  unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
+
+  write(fd, &f, 1);
+  write(fd, &a, 1);
+  write(fd, &c, 1);
+  write(fd, &bcc, 1);
+  write(fd, &f, 1);
+
+  printf("Disconnection Request Sent!\n\n");
+}
+
+void waitingDisconnect(){
+  int estado = START;
+  unsigned char buf;
+
+  // State Machine For the Connection Request
+  while(1){
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+    }
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x01) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x0B) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x01 ^ 0x0B)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = STOP;
+      else estado = START;
+    }
+    else  break;
+  }
+  
+  //alarm(0); // cancela todos os alarmes pendentes*/
+  printf("Disconnection Request Received!\n\n");
+}
+
+void sendAcknowledgement(){
+  unsigned char f = 0x7E, a = 0x03, c = 0x07, bcc = a ^ c;
+
+  write(fd, &f, 1);
+  write(fd, &a, 1);
+  write(fd, &c, 1);
+  write(fd, &bcc, 1);
+  write(fd, &f, 1);
+
+  printf("Confirmation Sent!\n\n");
 }
 
 int main(int argc, char** argv)
@@ -144,10 +208,14 @@ int main(int argc, char** argv)
 
   //=================
 
-  (void) signal(SIGALRM, establishConnection);
+  (void) signal(SIGALRM, connect);
 
-  establishConnection(); // sends request to establish connection
+  connect(); // sends request to establish connection
   waitingAcknowledgment(); // waits for the receiver acknowledgment
+
+  disconnect();
+  waitingDisconnect();
+  sendAcknowledgement();
 
   //=================
 

@@ -16,6 +16,8 @@
 
 volatile int STOP=FALSE;
 
+int fd;
+
 #define START 1
 #define FLAG_RCV 2
 #define A_RCV 3
@@ -23,7 +25,7 @@ volatile int STOP=FALSE;
 #define BCC_OK 5
 #define STOP 6
 
-void receiveConnectionRequest(int fd){
+void receiveConnectionRequest(){
   int estado = START;
   unsigned char buf;
 
@@ -58,10 +60,10 @@ void receiveConnectionRequest(int fd){
     else break;
   }
 
-  printf("\nMensagem Recebida!\n\nEnviando Confirmacao...\n");
+  printf("\nConnection Request Received!\n\nSending Confirmation...\n");
 }
 
-void writeAcknowledge(int fd){
+void writeAcknowledge(){
   unsigned char f = 0x7E, a = 0x01, c = 0x07, bcc = a ^ c;
 
   write(fd, &f, 1);
@@ -70,12 +72,99 @@ void writeAcknowledge(int fd){
   write(fd, &bcc, 1);
   write(fd, &f, 1);
 
-  printf("Acknowledgment Enviado!\n\n");
+  printf("Confirmation Sent!\n");
+}
+
+void waitingDisconnectionRequest(){
+  int estado = START;
+  unsigned char buf;
+
+  // State Machine For the Connection Request
+  while(1){
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+    }
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x03) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x0B) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x03 ^ 0x0B)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = STOP;
+      else estado = START;
+    }
+    else break;
+  }
+
+  printf("\nDisconnection Request Received!\n\nSending Disconnection Request...\n");
+}
+
+void sendingDisconnectionRequest(){
+  unsigned char f = 0x7E, a = 0x01, c = 0x0B, bcc = a ^ c;
+
+  write(fd, &f, 1);
+  write(fd, &a, 1);
+  write(fd, &c, 1);
+  write(fd, &bcc, 1);
+  write(fd, &f, 1);
+
+  printf("Disconnection Request Sent!\n\nWaiting for Confirmation...");
+}
+
+void waintingAcknowledgment(){
+  int estado = START;
+  unsigned char buf;
+
+  // State Machine For the Connection Request
+  while(1){
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+    }
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x03) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x07) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x03 ^ 0x07)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = STOP;
+      else estado = START;
+    }
+    else break;
+  }
+
+  printf("\nConfirmation Received!\n\n");
 }
 
 int main(int argc, char** argv)
 {
-  int fd;
   struct termios oldtio, newtio;
 
   if ( (argc < 2) || 
@@ -126,8 +215,12 @@ int main(int argc, char** argv)
 
   //================================
 
-  receiveConnectionRequest(fd);
-  writeAcknowledge(fd);
+  receiveConnectionRequest();
+  writeAcknowledge();
+
+  waitingDisconnectionRequest();
+  sendingDisconnectionRequest();
+  waintingAcknowledgment();
 
   //================================
 
