@@ -37,7 +37,6 @@ int R = 0;
 
 
 void connect(){
-  if(tentativas != 3){
     unsigned char f = 0x7E, a = 0x03, c = 0x03, bcc = a ^ c;
 
     write(fd, &f, 1);
@@ -46,17 +45,8 @@ void connect(){
     write(fd, &bcc, 1);
     write(fd, &f, 1);
 
-    if(tentativas != 0)
-      printf("\nConnection Request Resent!\n\nWaiting for Confirmation...\n");
-    else
-      printf("\nConnection Request Sent!\n\nWaiting for Confirmation...\n");
     alarm(3); // quantidade de tempo que espera pelo acknowledgment
-  }
-  else{
-    printf("\nAborting Connection with the Receiver!\nReached the Limit of Resquests!\n\n");
-    exit(-1); // acaba o programa
-  }
-  tentativas++;
+
 }
 
 void waitingAcknowledgment(){
@@ -268,7 +258,7 @@ void waitingAcknowledgmentInfo(){
   return rec;
 }
 
-int llwrite(int fd, char *buf, int length {
+int llwrite(int fd, char *buf, int length) {
     
     while(tentativas != 3) {
         writeInfo(fd, buf, length);
@@ -276,6 +266,45 @@ int llwrite(int fd, char *buf, int length {
     }
 
     return -1; // numero de tentativas excedido
+}
+
+int llopen(int porta, int user){
+        
+  int fd = open(argv[1], O_RDWR | O_NOCTTY );
+  if (fd <0) {perror(argv[1]); exit(-1); }
+
+  if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    perror("tcgetattr");
+    exit(-1);
+  }
+
+  /*
+  Configuração da Porta Série
+  */
+  bzero(&newtio, sizeof(newtio));
+  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+  newtio.c_iflag = IGNPAR;
+  newtio.c_oflag = 0;
+
+  /* set input mode (non-canonical, no echo,...) */
+  newtio.c_lflag = 0;
+
+  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
+  newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
+
+  /* 
+    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
+    leitura do(s) pr�ximo(s) caracter(es)
+  */
+
+  tcflush(fd, TCIOFLUSH);
+
+  if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
+  return fd;
 }
 
 int main(int argc, char** argv)
