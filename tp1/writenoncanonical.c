@@ -24,7 +24,9 @@ int fase = CONNECT;
 
 volatile int STOP=FALSE;
 
-int tentativas= 0, fd;
+int tentativas= 0, fd, timeOut = 0;
+
+int R = 0;
 
 #define START 1
 #define FLAG_RCV 2
@@ -182,8 +184,98 @@ void sendAcknowledgement(){
 
 void timeOut(){
   if(fase == CONNECT) connect();
-  else if(fase == DATA_TRANSMISSION){} // resend_data()
+  else if(fase == DATA_TRANSMISSION){
+      timeOut = 1;
+      tentativas++;
+  } // resend_data()
   else disconnect();
+}
+
+void writeInfo(int fd, char *buffer, int length){
+
+    unsigned char f = 0x7E, a = 0x03, c, bcc1 = a ^ c, bcc2 = buffer[0];
+
+    if(R) c = 0x40;
+    else c = 0x00;
+
+    write(fd, &f, 1);
+    write(fd, &a, 1);
+    write(fd, &c, 1);
+    write(fd, &bcc1, 1);
+
+    int cont = 1;
+    while(cont < (length-1)){
+        write(fd, buffer[cont], 1);
+        bcc2 = (bcc2 ^ buffer[cont]);
+        cont++;
+    }
+
+    write(fd, &bcc2, 1);
+    write(fd, &f, 1);
+
+    alarm(3); // quantidade de tempo que espera pelo acknowledgment
+
+}
+
+void waitingAcknowledgmentInfo(){
+  int estado = START;
+  unsigned char buf;
+  int rec = 1;
+  timeOut = 0;
+
+  // State Machine For the Connection Request
+  while(1){
+    if(timeOut) break;
+    if(estado == START){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+    }
+    else if(estado == FLAG_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x01) estado = A_RCV;
+      else if(buf != 0x7E) estado = START;
+    }
+    else if(estado == A_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == 0x07) estado = C_RCV;
+      else estado = START;
+    }
+    else if(estado == C_RCV){
+      read(fd, &buf, 1);
+      if(buf == 0x7E) estado = FLAG_RCV;
+      else if(buf == (0x01 ^ 0x07)) estado = BCC_OK;
+      else estado = START;
+    }
+    else if(estado == BCC_OK){
+      read(fd, &buf, 1);
+      else if(buf == 0x85 || buf == 0x81){
+        estado = STOP;
+        R = 1;
+      }
+      else if(buf == 0x05 || buf == 0x01){
+        estado = STOP;
+        R = 0;
+      }
+      else estado = START;
+      if(buf == 0x81 || buf == 0x01) rec = 0; // info rejeitada
+    }
+    else  break;
+  }
+  
+  alarm(0); // cancela todos os alarmes pendentes*/
+
+  return rec;
+}
+
+int llwrite(int fd, char *buf, int length {
+    
+    while(tentativas != 3) {
+        writeInfo(fd, buf, length);
+        if(waitingAcknowledgmentInfo()) return length; // informacao enviada corretamente         
+    }
+
+    return -1; // numero de tentativas excedido
 }
 
 int main(int argc, char** argv)
