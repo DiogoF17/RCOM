@@ -16,29 +16,33 @@
 #define FALSE 0
 #define TRUE 1
 
-#define CONNECT 0
-#define DATA_TRANSMISSION 1
-#define DISCONNECT 2
-
-int fase = CONNECT;
-
-volatile int STOP=FALSE;
-
-int tentativas= 0, fd, timeOut = 0;
-
-int R = 0;
-
 #define START 1
 #define FLAG_RCV 2
 #define A_RCV 3
 #define C_RCV 4
 #define BCC_OK 5
-#define STOP 6
+#define FINAL 6
 
+#define TRANSMITTER 1
 
-void connect(){
+#define MAX_DATA_PACKET 512
+
+struct termios oldtio,newtio;
+
+volatile int STOP=FALSE;
+
+int tentativas= 0, timeOut_var = 0;
+
+int S = 0;
+
+int nSeq = 0;
+
+//-----------------------------
+//    USADAS EM LLOPEN
+//-----------------------------
+
+void connect(int fd){
     unsigned char f = 0x7E, a = 0x03, c = 0x03, bcc = a ^ c;
-
     write(fd, &f, 1);
     write(fd, &a, 1);
     write(fd, &c, 1);
@@ -46,50 +50,88 @@ void connect(){
     write(fd, &f, 1);
 
     alarm(3); // quantidade de tempo que espera pelo acknowledgment
-
 }
 
-void waitingAcknowledgment(){
+int waitConnect(int fd){
   int estado = START;
   unsigned char buf;
+  timeOut_var = 0;
 
   // State Machine For the Connection Request
   while(1){
-    if(estado == START){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
+    if(timeOut_var) return 0;
+
+    if(read(fd, &buf, 1) != 0){ // caso tenha lido alguma coisa, ou seja, buf nao esta vazio
+      if(estado == START){
+        if(buf == 0x7E) estado = FLAG_RCV;
+      }
+      else if(estado == FLAG_RCV){
+        if(buf == 0x01) estado = A_RCV;
+        else if(buf != 0x7E) estado = START;
+      }
+      else if(estado == A_RCV){
+        if(buf == 0x7E) estado = FLAG_RCV;
+        else if(buf == 0x07) estado = C_RCV;
+        else estado = START;
+      }
+      else if(estado == C_RCV){
+        if(buf == 0x7E) estado = FLAG_RCV;
+        else if(buf == (0x01 ^ 0x07)) estado = BCC_OK;
+        else estado = START;
+      }
+      else if(estado == BCC_OK){
+        if(buf == 0x7E){ 
+          estado = FINAL;
+          break;
+        }
+        else estado = START;
+      }
     }
-    else if(estado == FLAG_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x01) estado = A_RCV;
-      else if(buf != 0x7E) estado = START;
-    }
-    else if(estado == A_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
-      else if(buf == 0x07) estado = C_RCV;
-      else estado = START;
-    }
-    else if(estado == C_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
-      else if(buf == (0x01 ^ 0x07)) estado = BCC_OK;
-      else estado = START;
-    }
-    else if(estado == BCC_OK){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = STOP;
-      else estado = START;
-    }
-    else  break;
   }
   
   alarm(0); // cancela todos os alarmes pendentes*/
-  printf("Confirmation Received!\n\n");
+  return 1;
 }
 
-void disconnect(){
-  /*unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
+int llopen(int porta, int user){
+  char buf[50];
+  sprintf(buf, "/dev/ttyS%d", porta);
+        
+  int fd = open(buf, O_RDWR | O_NOCTTY );
+  if (fd <0) {perror(buf); exit(-1); }
+
+  if (tcgetattr(fd,&oldtio) == -1) { 
+    perror("tcgetattr");
+    exit(-1);
+  }
+
+  bzero(&newtio, sizeof(newtio));
+  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+  newtio.c_iflag = IGNPAR;
+  newtio.c_oflag = 0;
+  newtio.c_lflag = 0;
+  newtio.c_cc[VTIME]    = 0;   
+  newtio.c_cc[VMIN]     = 0;   
+
+  tcflush(fd, TCIOFLUSH);
+
+  if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
+  while(tentativas != 3) {
+        connect(fd);
+        if(waitConnect(fd)) return fd; // ligacao estabelecida com sucesso, retorna descritor     
+  }
+
+  return -1; // numero de tentativas excedido, retorna valor negativo
+}
+
+//-------------------------------
+
+void disconnect(int fd){
+  unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
 
   write(fd, &f, 1);
   write(fd, &a, 1);
@@ -97,70 +139,52 @@ void disconnect(){
   write(fd, &bcc, 1);
   write(fd, &f, 1);
 
-  printf("Disconnection Request Sent!\n\n");*/
-  if(tentativas != 3){
-    unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
-
-    write(fd, &f, 1);
-    write(fd, &a, 1);
-    write(fd, &c, 1);
-    write(fd, &bcc, 1);
-    write(fd, &f, 1);
-
-    if(tentativas != 0)
-      printf("\nDisconnection Request Resent!\n\nWaiting for Confirmation...\n");
-    else
-      printf("\nDisconnection Request Sent!\n\nWaiting for Confirmation...\n");
-    alarm(3); // quantidade de tempo que espera pelo acknowledgment
-  }
-  else{
-    printf("\nAborting Disconnection with the Receiver!\nReached the Limit of Resquests!\n\n");
-    exit(-1); // acaba o programa
-  }
-  tentativas++;
-  
+  alarm(3); // quantidade de tempo que espera pelo acknowledgment
 }
 
-void waitingDisconnect(){
+int waitDisconnect(int fd){
   int estado = START;
   unsigned char buf;
+  timeOut_var = 0;
 
-  // State Machine For the Connection Request
-  while(1){
-    if(estado == START){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
+  // State Machine For the Disconnection Request
+  while(1){    
+    if(timeOut_var) return 0;
+
+    if(read(fd, &buf, 1) != 0){ // caso tenha lido alguma coisa, ou seja, buf nao esta vazio
+      if(estado == START){
+        if(buf == 0x7E) estado = FLAG_RCV;
+      }
+      else if(estado == FLAG_RCV){
+        if(buf == 0x01) estado = A_RCV;
+        else if(buf != 0x7E) estado = START;
+      }
+      else if(estado == A_RCV){
+        if(buf == 0x7E) estado = FLAG_RCV;
+        else if(buf == 0x0B) estado = C_RCV;
+        else estado = START;
+      }
+      else if(estado == C_RCV){
+        if(buf == 0x7E) estado = FLAG_RCV;
+        else if(buf == (0x01 ^ 0x0B)) estado = BCC_OK;
+        else estado = START;
+      }
+      else if(estado == BCC_OK){
+        if(buf == 0x7E){ 
+          estado = FINAL;
+          break;
+        }
+        else estado = START;
+      }
+      else  break;
     }
-    else if(estado == FLAG_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x01) estado = A_RCV;
-      else if(buf != 0x7E) estado = START;
-    }
-    else if(estado == A_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
-      else if(buf == 0x0B) estado = C_RCV;
-      else estado = START;
-    }
-    else if(estado == C_RCV){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = FLAG_RCV;
-      else if(buf == (0x01 ^ 0x0B)) estado = BCC_OK;
-      else estado = START;
-    }
-    else if(estado == BCC_OK){
-      read(fd, &buf, 1);
-      if(buf == 0x7E) estado = STOP;
-      else estado = START;
-    }
-    else  break;
   }
   
   alarm(0); // cancela todos os alarmes pendentes*/
-  printf("Disconnection Request Received!\n\n");
+  return 1;
 }
 
-void sendAcknowledgement(){
+void sendAcknowledgement(int fd){
   unsigned char f = 0x7E, a = 0x03, c = 0x07, bcc = a ^ c;
 
   write(fd, &f, 1);
@@ -168,25 +192,58 @@ void sendAcknowledgement(){
   write(fd, &c, 1);
   write(fd, &bcc, 1);
   write(fd, &f, 1);
+}
 
-  printf("Confirmation Sent!\n\n");
+int llclose(int fd){
+  while(tentativas != 3) {
+        disconnect(fd);
+        if(waitDisconnect(fd)){
+          sendAcknowledgement(fd);
+          
+          if (tcsetattr(fd,TCSANOW,&oldtio) == -1) {
+            perror("tcsetattr");
+            exit(-1);
+          }
+
+          close(fd);
+
+          return 1; // ligacao estabelecida com sucesso, retorna descritor     
+        } 
+  }
+
+  if (tcsetattr(fd,TCSANOW,&oldtio) == -1) {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
+  close(fd);
+
+  return -1;
 }
 
 void timeOut(){
+  timeOut_var = 1;
+  tentativas++;/*
   if(fase == CONNECT) connect();
   else if(fase == DATA_TRANSMISSION){
       timeOut = 1;
       tentativas++;
   } // resend_data()
-  else disconnect();
+  else disconnect();*/
 }
+
+//-----------------------------
+//    USADAS PARA ESCREVER INFO
+//-----------------------------
 
 void writeInfo(int fd, char *buffer, int length){
 
-    unsigned char f = 0x7E, a = 0x03, c, bcc1 = a ^ c, bcc2 = buffer[0];
+    unsigned char f = 0x7E, a = 0x03, c, bcc1, bcc2 = buffer[0];
 
-    if(R) c = 0x40;
+    if(S) c = 0x40;
     else c = 0x00;
+
+    bcc1 = a ^ c;
 
     write(fd, &f, 1);
     write(fd, &a, 1);
@@ -195,7 +252,7 @@ void writeInfo(int fd, char *buffer, int length){
 
     int cont = 1;
     while(cont < (length-1)){
-        write(fd, buffer[cont], 1);
+        write(fd, &buffer[cont], 1);
         bcc2 = (bcc2 ^ buffer[cont]);
         cont++;
     }
@@ -207,15 +264,18 @@ void writeInfo(int fd, char *buffer, int length){
 
 }
 
-void waitingAcknowledgmentInfo(){
+int waitingAcknowledgmentInfo(int fd){
   int estado = START;
   unsigned char buf;
   int rec = 1;
-  timeOut = 0;
+  timeOut_var = 0;
 
   // State Machine For the Connection Request
   while(1){
-    if(timeOut) break;
+    if(timeOut_var){
+      rec = 0;
+      break;
+    }
     if(estado == START){
       read(fd, &buf, 1);
       if(buf == 0x7E) estado = FLAG_RCV;
@@ -239,13 +299,13 @@ void waitingAcknowledgmentInfo(){
     }
     else if(estado == BCC_OK){
       read(fd, &buf, 1);
-      else if(buf == 0x85 || buf == 0x81){
-        estado = STOP;
-        R = 1;
+      if(buf == 0x85 || buf == 0x81){
+        estado = FINAL;
+        S = 1;
       }
       else if(buf == 0x05 || buf == 0x01){
-        estado = STOP;
-        R = 0;
+        estado = FINAL;
+        S = 0;
       }
       else estado = START;
       if(buf == 0x81 || buf == 0x01) rec = 0; // info rejeitada
@@ -258,115 +318,134 @@ void waitingAcknowledgmentInfo(){
   return rec;
 }
 
-int llwrite(int fd, char *buf, int length) {
-    
-    while(tentativas != 3) {
-        writeInfo(fd, buf, length);
-        if(waitingAcknowledgmentInfo()) return length; // informacao enviada corretamente         
-    }
+//-----------------------------
 
-    return -1; // numero de tentativas excedido
-}
-
-int llopen(int porta, int user){
-        
-  int fd = open(argv[1], O_RDWR | O_NOCTTY );
-  if (fd <0) {perror(argv[1]); exit(-1); }
-
-  if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
-  }
-
-  /*
-  Configuração da Porta Série
-  */
-  bzero(&newtio, sizeof(newtio));
-  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-  newtio.c_iflag = IGNPAR;
-  newtio.c_oflag = 0;
-
-  /* set input mode (non-canonical, no echo,...) */
-  newtio.c_lflag = 0;
-
-  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
-
-  /* 
-    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
-    leitura do(s) pr�ximo(s) caracter(es)
-  */
-
-  tcflush(fd, TCIOFLUSH);
-
-  if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
-    perror("tcsetattr");
-    exit(-1);
-  }
-
-  return fd;
-}
-
-int main(int argc, char** argv)
-{
-  struct termios oldtio,newtio;
-  
-  if ( (argc < 2) || 
-        ((strcmp("/dev/ttyS10", argv[1])!=0) && 
-        (strcmp("/dev/ttyS11", argv[1])!=0) )) {
-    printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS11\n");
+void dataPacket(unsigned char *data, char *buf, int length){
+  if(MAX_DATA_PACKET < (length + 4)){
+    printf("Number of bytes of data packet exceded");
     exit(1);
   }
 
-  /*
-    Open serial port device for reading and writing and not as controlling tty
-    because we don't want to get killed if linenoise sends CTRL-C.
-  */
+  data[0] = 0x01;
+  data[1] = (unsigned char) nSeq;
+  data[2] = (unsigned char) (length / 256);
+  data[3] = (unsigned char) (length % 256);
 
-  fd = open(argv[1], O_RDWR | O_NOCTTY );
-  if (fd <0) {perror(argv[1]); exit(-1); }
+  int aux = 0;
+  while(aux < length){
+    data[aux + 4] = (unsigned char) buf[length];
+    aux++;
+  } 
+}
 
-  if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
+void controlPacket(unsigned char *data, int controll, int size){
+  data[0] = (unsigned char) controll;
+  data[1] = 0x00;
+  data[2] = (unsigned char) (sizeof(int));
+  data[3] = (unsigned char) size;
+}
+
+int llwrite(int fd, char *buf, int length) {
+  
+  while(tentativas != 3) {
+      writeInfo(fd, buf, length + 4);
+      if(waitingAcknowledgmentInfo(fd)) return length; // informacao enviada corretamente         
   }
 
-  /*
-  Configuração da Porta Série
-  */
-  bzero(&newtio, sizeof(newtio));
-  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-  newtio.c_iflag = IGNPAR;
-  newtio.c_oflag = 0;
+  return -1; // numero de tentativas excedido
+}
 
-  /* set input mode (non-canonical, no echo,...) */
-  newtio.c_lflag = 0;
+int fileSize(char *path){
+  FILE* fp = fopen(path, "r");
+  fseek(fp, 0, SEEK_END);
+  int size = ftell(fp);
+  fclose(fp);
 
-  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
+  return size;
+}
 
-  /* 
-    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
-    leitura do(s) pr�ximo(s) caracter(es)
-  */
+int main(int argc, char** argv){
+  //char buf[MAX_DATA_PACKET - 4];
 
-  tcflush(fd, TCIOFLUSH);
-
-  if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
-    perror("tcsetattr");
-    exit(-1);
+  if (argc < 3) {
+    printf("Usage:\tnserial SerialPort\n\tex: nserial 11 path\n");
+    exit(1);
   }
 
-  printf("New termios structure set\n");
-  printf("\n==============\n");
+  /*int foto = open(argv[2], O_RDWR);
+  if (foto < 0) {
+      printf("An error has occured during the opening of the file");
+      exit(1);
+  }
+
+  int size = fileSize(argv[2]); // size of file*/
+
+  //=====================
+  (void) signal(SIGALRM, timeOut);
+  //=====================
+
+  int fd = llopen(atoi(argv[1]), TRANSMITTER); // tries to connect with the receiver
+  if(fd < 0){
+    printf("An error has occured during the conncetion process!\n");
+    exit(1);
+  } 
+
+  //--------------
+/*
+  tentativas = 0;
+
+  unsigned char data[MAX_DATA_PACKET];
+
+  controlPacket(data, 2, size); // cria o controllPacket de inicio
+  if(llwrite(fd, data, strlen(data)) < 0){
+    printf("an error has occured during the transfer of data");
+    exit(1);
+  }
+
+  int nr;
+  while(1){
+    tentativas = 0;
+
+    nr = read(foto, buf, MAX_DATA_PACKET - 4);
+    
+    if(nr == 0) break; // ja leu o ficheiro todo
+    else if(nr < 0){
+      printf("An error has occured during the reading");
+      exit(1);
+    }
+
+    dataPacket(data, buf, strlen(buf));
+    if(llwrite(fd, data, strlen(data))){
+      printf("an error has occured during the transfer of data");
+      exit(1);
+    }
+  }
+
+  tentativas = 0;
+
+  controlPacket(data, 3, size); // cria o controllPacket de fim
+  if(llwrite(fd, data, strlen(data))){
+    printf("an error has occured during the transfer of data");
+    exit(1);
+  }
+  */
+
+  //--------------
+
+  tentativas = 0;
+
+  int ret = llclose(fd); // tries to connect with the receiver
+  if(ret < 0){
+    printf("An error has occured during the disconnection process!\n");
+    exit(1);
+  } 
+
 
   //=================
 
-  (void) signal(SIGALRM, timeOut);
-
   // Connecting
-  connect(); // sends request to establish connection
-  waitingAcknowledgment(); // waits for the receiver acknowledgment
+  /*connect(); // sends request to establish connection
+  waitConnect(); // waits for the receiver acknowledgment
 
   // Sending Data
   tentativas = 0;
@@ -378,18 +457,9 @@ int main(int argc, char** argv)
   fase = DISCONNECT;
   disconnect();
   waitingDisconnect();
-  sendAcknowledgement();
+  sendAcknowledgement();*/
 
   //=================
-
-  printf("==============\n\n");
-
-  if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
-    perror("tcsetattr");
-    exit(-1);
-  }
-
-  close(fd);
 
   return 0;
 }
