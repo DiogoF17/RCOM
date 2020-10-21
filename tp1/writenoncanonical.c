@@ -132,7 +132,9 @@ int llopen(int porta, int user){
   return -1; // numero de tentativas excedido, retorna valor negativo
 }
 
-//-------------------------------
+//-----------------------------
+//    USADAS EM LLCLOSE
+//-----------------------------
 
 void disconnect(int fd){
   unsigned char f = 0x7E, a = 0x03, c = 0x0B, bcc = a ^ c;
@@ -226,8 +228,9 @@ int llclose(int fd){
 }
 
 //-----------------------------
-//    USADAS PARA ESCREVER INFO
+//    USADAS EM LLWRITE
 //-----------------------------
+
 int doStuffing(unsigned char *stuffed_data, char *buf, int length){
   int indStuffing = 0, indBuf = 0;
   
@@ -397,6 +400,8 @@ void timeOut(){
   tentativas++;
 }
 
+//-----------------------------
+
 int main(int argc, char** argv){
   if (argc < 3) {
     printf("Usage:\tnserial SerialPort\n\tex: nserial 11 path\n");
@@ -405,12 +410,11 @@ int main(int argc, char** argv){
 
   int foto = open(argv[2], O_RDWR);
   if (foto < 0) {
-      printf("An error has occured during the opening of the file");
+      printf("An error has occured during the opening of the file\n");
       exit(1);
   }
 
   int size = fileSize(argv[2]); // size of file
-  // printf("Size: %d\n", size);
 
   //=====================
   (void) signal(SIGALRM, timeOut);
@@ -418,7 +422,7 @@ int main(int argc, char** argv){
 
   int fd = llopen(atoi(argv[1]), TRANSMITTER); // tries to connect with the receiver
   if(fd < 0){
-    printf("An error has occured during the conncetion process!\n");
+    printf("An error has occured during the conncetion process\n");
     exit(1);
   }
 
@@ -433,9 +437,11 @@ int main(int argc, char** argv){
 
   int numBytes = controlPacket(data, 2, size); // cria o controllPacket de inicio
   if(llwrite(fd, data, numBytes) < 0){
-    printf("an error has occured during the transfer of data");
+    printf("An error has occured during the transfer of data\n");
     exit(1);
   } 
+
+  // int imagem = open("imagem", O_CREAT | O_RDWR, 0777);
 
   while(1){
     tentativas = 0;
@@ -444,30 +450,33 @@ int main(int argc, char** argv){
     
     if(nr == 0) break; // ja leu o ficheiro todo
     else if(nr < 0){
-      printf("An error has occured during the reading");
+      printf("An error has occured during the reading\n");
       exit(1);
     }
 
-    bcc2 = getBcc2(buf, strlen(buf)); // bcc2 before stuffing
-    numBytes = doStuffing(stuffed_data, buf, strlen(buf));
+    bcc2 = getBcc2(buf, nr); // bcc2 before stuffing
+    numBytes = doStuffing(stuffed_data, buf, nr);
     numBytes = dataPacket(data, stuffed_data, numBytes);
     if(llwrite(fd, data, numBytes)){
-      printf("an error has occured during the transfer of data");
+      printf("An error has occured during the transfer of data\n");
       exit(1);
     }
+    
     /*int aux = 0;
-    while(aux < numBytes){
-      printf("%X | ", data[aux]);
+    while(aux < nr){
+      write(imagem, &buf[aux], 1);
       aux++;
-    }
-    printf("\n");*/
+    }*/
+   
   }
+
+  // close(imagem);
 
   tentativas = 0;
 
   numBytes = controlPacket(data, 3, size); // cria o controllPacket de fim
   if(llwrite(fd, data, numBytes)){
-    printf("an error has occured during the transfer of data");
+    printf("An error has occured during the transfer of data\n");
     exit(1);
   }
   
@@ -481,25 +490,6 @@ int main(int argc, char** argv){
     printf("An error has occured during the disconnection process!\n");
     exit(1);
   } 
-
-
-  //=================
-
-  // Connecting
-  /*connect(); // sends request to establish connection
-  waitConnect(); // waits for the receiver acknowledgment
-
-  // Sending Data
-  tentativas = 0;
-  fase = DATA_TRANSMISSION;
-  //send_data()
-
-  // Disconnecting
-  tentativas = 0;
-  fase = DISCONNECT;
-  disconnect();
-  waitingDisconnect();
-  sendAcknowledgement();*/
 
   //=================
 
