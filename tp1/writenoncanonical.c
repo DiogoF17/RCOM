@@ -25,7 +25,9 @@
 
 #define TRANSMITTER 1
 
-#define MAX_DATA_PACKET 512
+#define MAX_DATA_PACKET 1024
+#define MAX_STUFFING 1020
+#define MAX_READ 510
 
 struct termios oldtio,newtio;
 
@@ -36,6 +38,8 @@ int tentativas= 0, timeOut_var = 0;
 int S = 0;
 
 int nSeq = 0;
+
+int bcc2;
 
 //-----------------------------
 //    USADAS EM LLOPEN
@@ -221,24 +225,83 @@ int llclose(int fd){
   return -1;
 }
 
-void timeOut(){
-  timeOut_var = 1;
-  tentativas++;/*
-  if(fase == CONNECT) connect();
-  else if(fase == DATA_TRANSMISSION){
-      timeOut = 1;
-      tentativas++;
-  } // resend_data()
-  else disconnect();*/
-}
-
 //-----------------------------
 //    USADAS PARA ESCREVER INFO
 //-----------------------------
+int doStuffing(unsigned char *stuffed_data, char *buf, int length){
+  int indStuffing = 0, indBuf = 0;
+  
+  while(indBuf < length){
+    unsigned char data = (unsigned char) buf[indBuf];
+    if(data == 0x7E){
+      stuffed_data[indStuffing++] = 0x7D;
+      stuffed_data[indStuffing] = 0x5E;
+    }
+    else if(data == 0x7D){
+      stuffed_data[indStuffing++] = 0x7D;
+      stuffed_data[indStuffing] = 0x5D;
+    }
+    else stuffed_data[indStuffing] = data;
 
-void writeInfo(int fd, char *buffer, int length){
+    indStuffing++; indBuf++;
+  }
 
-    unsigned char f = 0x7E, a = 0x03, c, bcc1, bcc2 = buffer[0];
+  return indStuffing;
+}
+
+int dataPacket(unsigned char *data, unsigned char *buf, int length){
+  if(MAX_DATA_PACKET < (length + 4)){
+    printf("Number of bytes of data packet exceded");
+    exit(1);
+  }
+
+  data[0] = 0x01;
+  data[1] = (unsigned char) nSeq;
+  data[2] = (unsigned char) (length / 256);
+  data[3] = (unsigned char) (length % 256);
+
+  int aux = 4;
+  while(aux < length){
+    data[aux] = (unsigned char) buf[length];
+    aux++;
+  } 
+
+  return aux;
+}
+
+int controlPacket(unsigned char *data, int controll, int size){
+  data[0] = (unsigned char) controll;
+  data[1] = 0x00;
+  data[2] = (unsigned char) (sizeof(int));
+  data[3] = (unsigned char) size;
+
+  return 4;
+}
+
+int fileSize(char *path){
+  FILE* fp = fopen(path, "r");
+  fseek(fp, 0L, SEEK_END);
+  int size = ftell(fp);
+  fclose(fp);
+
+  return size;
+}
+
+unsigned char getBcc2(char *buf, int length){
+  unsigned char bcc2 = buf[0];
+
+  int cont = 1;
+  while(cont < length){
+      bcc2 = (bcc2 ^ buf[cont]);
+      cont++;
+  }
+
+  return bcc2;
+}
+
+void writeInfo(int fd, unsigned char *buffer, int length){
+
+    unsigned char f = 0x7E, a = 0x03, c, bcc1;
 
     if(S) c = 0x40;
     else c = 0x00;
@@ -250,11 +313,10 @@ void writeInfo(int fd, char *buffer, int length){
     write(fd, &c, 1);
     write(fd, &bcc1, 1);
 
-    int cont = 1;
-    while(cont < (length-1)){
-        write(fd, &buffer[cont], 1);
-        bcc2 = (bcc2 ^ buffer[cont]);
-        cont++;
+    int cont = 0;
+    while(cont < length){
+      write(fd, &buffer[cont], 1);
+      cont++;
     }
 
     write(fd, &bcc2, 1);
@@ -318,34 +380,7 @@ int waitingAcknowledgmentInfo(int fd){
   return rec;
 }
 
-//-----------------------------
-
-void dataPacket(unsigned char *data, char *buf, int length){
-  if(MAX_DATA_PACKET < (length + 4)){
-    printf("Number of bytes of data packet exceded");
-    exit(1);
-  }
-
-  data[0] = 0x01;
-  data[1] = (unsigned char) nSeq;
-  data[2] = (unsigned char) (length / 256);
-  data[3] = (unsigned char) (length % 256);
-
-  int aux = 0;
-  while(aux < length){
-    data[aux + 4] = (unsigned char) buf[length];
-    aux++;
-  } 
-}
-
-void controlPacket(unsigned char *data, int controll, int size){
-  data[0] = (unsigned char) controll;
-  data[1] = 0x00;
-  data[2] = (unsigned char) (sizeof(int));
-  data[3] = (unsigned char) size;
-}
-
-int llwrite(int fd, char *buf, int length) {
+int llwrite(int fd, unsigned char *buf, int length) {
   
   while(tentativas != 3) {
       writeInfo(fd, buf, length + 4);
@@ -355,30 +390,27 @@ int llwrite(int fd, char *buf, int length) {
   return -1; // numero de tentativas excedido
 }
 
-int fileSize(char *path){
-  FILE* fp = fopen(path, "r");
-  fseek(fp, 0, SEEK_END);
-  int size = ftell(fp);
-  fclose(fp);
+//-----------------------------
 
-  return size;
+void timeOut(){
+  timeOut_var = 1;
+  tentativas++;
 }
 
 int main(int argc, char** argv){
-  //char buf[MAX_DATA_PACKET - 4];
-
   if (argc < 3) {
     printf("Usage:\tnserial SerialPort\n\tex: nserial 11 path\n");
     exit(1);
   }
 
-  /*int foto = open(argv[2], O_RDWR);
+  int foto = open(argv[2], O_RDWR);
   if (foto < 0) {
       printf("An error has occured during the opening of the file");
       exit(1);
   }
 
-  int size = fileSize(argv[2]); // size of file*/
+  int size = fileSize(argv[2]); // size of file
+  // printf("Size: %d\n", size);
 
   //=====================
   (void) signal(SIGALRM, timeOut);
@@ -388,25 +420,27 @@ int main(int argc, char** argv){
   if(fd < 0){
     printf("An error has occured during the conncetion process!\n");
     exit(1);
-  } 
-
-  //--------------
-/*
-  tentativas = 0;
-
-  unsigned char data[MAX_DATA_PACKET];
-
-  controlPacket(data, 2, size); // cria o controllPacket de inicio
-  if(llwrite(fd, data, strlen(data)) < 0){
-    printf("an error has occured during the transfer of data");
-    exit(1);
   }
 
+  //--------------
+
+  tentativas = 0;
+
   int nr;
+  char buf[MAX_READ];
+  unsigned char stuffed_data[MAX_STUFFING];
+  unsigned char data[MAX_DATA_PACKET];
+
+  int numBytes = controlPacket(data, 2, size); // cria o controllPacket de inicio
+  if(llwrite(fd, data, numBytes) < 0){
+    printf("an error has occured during the transfer of data");
+    exit(1);
+  } 
+
   while(1){
     tentativas = 0;
 
-    nr = read(foto, buf, MAX_DATA_PACKET - 4);
+    nr = read(foto, buf, MAX_READ);
     
     if(nr == 0) break; // ja leu o ficheiro todo
     else if(nr < 0){
@@ -414,21 +448,29 @@ int main(int argc, char** argv){
       exit(1);
     }
 
-    dataPacket(data, buf, strlen(buf));
-    if(llwrite(fd, data, strlen(data))){
+    bcc2 = getBcc2(buf, strlen(buf)); // bcc2 before stuffing
+    numBytes = doStuffing(stuffed_data, buf, strlen(buf));
+    numBytes = dataPacket(data, stuffed_data, numBytes);
+    if(llwrite(fd, data, numBytes)){
       printf("an error has occured during the transfer of data");
       exit(1);
     }
+    /*int aux = 0;
+    while(aux < numBytes){
+      printf("%X | ", data[aux]);
+      aux++;
+    }
+    printf("\n");*/
   }
 
   tentativas = 0;
 
-  controlPacket(data, 3, size); // cria o controllPacket de fim
-  if(llwrite(fd, data, strlen(data))){
+  numBytes = controlPacket(data, 3, size); // cria o controllPacket de fim
+  if(llwrite(fd, data, numBytes)){
     printf("an error has occured during the transfer of data");
     exit(1);
   }
-  */
+  
 
   //--------------
 
